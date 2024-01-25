@@ -636,7 +636,9 @@ bool primitive_inst::use_async_compilation() {
         return false;
     }
 
-    return (_node->is_type<convolution>() || _node->is_type<fully_connected>() || _node->is_type<gemm>() ||
+    return (_node->is_type<convolution>() || _node->is_type<fully_connected>() ||
+            (_node->is_type<gemm>() && _node->get_selected_impl() &&
+             _node->get_selected_impl()->get_kernel_name().find("gemm_ref") != std::string::npos) ||
             (_node->is_type<softmax>() && _node->get_selected_impl() &&
              _node->get_selected_impl()->get_kernel_name().find("softmax_gpu_ref") != std::string::npos));
 }
