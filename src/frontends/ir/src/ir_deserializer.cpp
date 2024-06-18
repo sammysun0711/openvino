@@ -356,7 +356,10 @@ void ov::XmlDeserializer::on_adapter(const std::string& name, ov::ValueAccessor<
                 OPENVINO_THROW("Attribute and shape size are inconsistent for ", type, " op!");
 
             char* data = m_weights->get_ptr<char>() + offset;
-            auto buffer = std::make_shared<ov::SharedBuffer<std::shared_ptr<ov::AlignedBuffer>>>(data, size, m_weights);
+            // auto buffer = std::make_shared<ov::SharedBuffer<std::shared_ptr<ov::AlignedBuffer>>>(data, size,
+            // m_weights);
+            auto buffer = std::make_shared<ov::AlignedBuffer>(size);
+            std::memcpy(buffer->get_ptr(), data, size);
             a->set(buffer);
         }
     } else if (auto a = ov::as_type<ov::AttributeAdapter<ov::op::util::FrameworkNodeAttrs>>(&adapter)) {
