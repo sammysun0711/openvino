@@ -360,12 +360,15 @@ public:
             auto indirect_kernel_params = get_kernel_params(impl_param, impl_param.is_dynamic(), true);
             kernels_data.push_back(kernel_selector.get_best_kernel(indirect_kernel_params));
         }
-
+        std::cout << "********************************************** Remove ARL-H Specific WA that force sdpa_opt for 2nd "
+                     "token+ generation **************************************************\n";
+        /*
         const auto& gfx_ver = impl_param.get_program().get_engine().get_device_info().gfx_ver;
         if (gfx_ver.major == 12 && gfx_ver.minor == 74) { // ARL only
             sdpa_kernel_params.should_use_sdpa_opt = true;
             kernels_data.push_back(kernel_selector.get_best_kernel(sdpa_kernel_params));
         }
+        */
 
         return std::make_unique<scaled_dot_product_attention_impl>(kernels_data);
     }
