@@ -199,8 +199,10 @@ bool get_imad_support(const cl::Device& device) {
 }
 
 device_info init_device_info(const cl::Device& device, const cl::Context& context) {
+    std::cout << "init_device_info(const cl::Device& device, const cl::Context& context) called\n";
     device_info info = {};
     info.vendor_id = static_cast<uint32_t>(device.getInfo<CL_DEVICE_VENDOR_ID>());
+    std::cout << "info.vendor_id: " << info.vendor_id << "\n";
     info.dev_name = device.getInfo<CL_DEVICE_NAME>();
     info.driver_version = device.getInfo<CL_DRIVER_VERSION>();
     info.dev_type = get_device_type(device);
@@ -218,6 +220,7 @@ device_info init_device_info(const cl::Device& device, const cl::Context& contex
     // So below we limit max WG size by 64 which was selected based on few experiments.
     constexpr int nvidia_vendor_id = 0x10DE;
     if (info.vendor_id == nvidia_vendor_id) {
+        std::cout << "info.vendor_id == nvidia_vendor_id\n";
         info.max_work_group_size = 64;
     }
 
@@ -274,6 +277,8 @@ device_info init_device_info(const cl::Device& device, const cl::Context& contex
     bool device_attr_supported = extensions.find("cl_intel_device_attribute_query") != std::string::npos;
     bool nv_device_attr_supported = extensions.find("cl_nv_device_attribute_query") != std::string::npos;
     info.has_separate_cache = false;
+    std::cout << "device_attr_supported: " << device_attr_supported << "\n";
+    std::cout << "nv_device_attr_supported: " << nv_device_attr_supported << "\n";
     if (device_attr_supported) {
         info.ip_version = device.getInfo<CL_DEVICE_IP_VERSION_INTEL>();
         info.gfx_ver = parse_version(info.ip_version);
@@ -305,6 +310,7 @@ device_info init_device_info(const cl::Device& device, const cl::Context& contex
         info.num_eus_per_sub_slice = 0;
         info.num_threads_per_eu = 0;
     }
+    std::cout << "info.gfx_ver: " << info.gfx_ver.major << "." << info.gfx_ver.minor << "." << info.gfx_ver.revision << "\n";
 
     info.num_ccs = 1;
     if (info.supports_queue_families) {
@@ -319,13 +325,17 @@ device_info init_device_info(const cl::Device& device, const cl::Context& contex
         info.num_ccs = std::max<uint32_t>(num_queues, info.num_ccs);
     }
 
+    std::cout << "Get num_css info passed\n";
 
 #ifdef ENABLE_ONEDNN_FOR_GPU
     using namespace dnnl::impl::gpu::intel::jit;
     ngen::HW hw = ngen::HW::Unknown;
     ngen::Product product = {ngen::ProductFamily::Unknown, 0};
+    std::cout << "before generator_t<ngen::HW::Unknown>::detectHWInfo(context.get(), device.get(), hw, product) called\n";
     generator_t<ngen::HW::Unknown>::detectHWInfo(context.get(), device.get(), hw, product);
+    std::cout << "after generator_t<ngen::HW::Unknown>::detectHWInfo(context.get(), device.get(), hw, product) called\n";
     info.arch = convert_ngen_arch(hw);
+    std::cout << "After convert_ngen_arch(hw)\n";
     // We change the value of this flag to avoid OneDNN usage for the platforms unknown to OneDNN
     // This is required to guarantee some level of forward compatibility for the new HW generations
     // as OneDNN code generators are not generic and typically requires some updates for the new architectures
@@ -334,10 +344,11 @@ device_info init_device_info(const cl::Device& device, const cl::Context& contex
     if (product.family == ngen::ProductFamily::Unknown) {
         info.supports_immad = false;
     }
+    std::cout << "info.supports_immad: " << info.supports_immad << "\n";
 #else  // ENABLE_ONEDNN_FOR_GPU
     info.arch = gpu_arch::unknown;
 #endif  // ENABLE_ONEDNN_FOR_GPU
-
+    std::cout << "init_device_info(const cl::Device& device, const cl::Context& context) end\n";
     return info;
 }
 
@@ -350,6 +361,7 @@ bool does_device_support(int32_t param, const cl::Device& device) {
 }
 
 memory_capabilities init_memory_caps(const cl::Device& device, const device_info& info) {
+    std::cout << "init_memory_caps(const cl::Device& device, const device_info& info) called!\n";
     std::vector<allocation_type> memory_caps;
     if (info.supports_usm) {
         if (does_device_support(CL_DEVICE_HOST_MEM_CAPABILITIES_INTEL, device)) {

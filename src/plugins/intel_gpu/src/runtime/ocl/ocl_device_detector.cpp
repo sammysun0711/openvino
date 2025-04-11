@@ -39,6 +39,10 @@ bool does_device_match_config(const cl::Device& device) {
     if (device.getInfo<CL_DEVICE_TYPE>() != CL_DEVICE_TYPE_GPU) {
         return false;
     }
+    if (device.getInfo<CL_DEVICE_VENDOR_ID>() != cldnn::INTEL_VENDOR_ID) {
+        std::cout << "Non intel gpu found!\n";
+        //return false;
+    }
 
     int32_t ocl_major = -1;
     int32_t ocl_minor = -1;
@@ -93,6 +97,7 @@ static constexpr auto INTEL_D3D11_SHARING_EXT_NAME = "cl_khr_d3d11_sharing";
 #endif // _WIN32
 
 static std::vector<cl::Device> getSubDevices(cl::Device& rootDevice) {
+    std::cout << "getSubDevices(cl::Device& rootDevice) called!\n";
     cl_uint maxSubDevices;
     size_t maxSubDevicesSize;
     const auto err = clGetDeviceInfo(rootDevice(),
@@ -102,6 +107,7 @@ static std::vector<cl::Device> getSubDevices(cl::Device& rootDevice) {
 
     OPENVINO_ASSERT(err == CL_SUCCESS && maxSubDevicesSize == sizeof(maxSubDevices),
                     "[GPU] clGetDeviceInfo(..., CL_DEVICE_PARTITION_MAX_SUB_DEVICES,...)");
+    std::cout << "maxSubDevices: " << maxSubDevices << "\n";
     if (maxSubDevices == 0) {
         return {};
     }
@@ -148,14 +154,18 @@ std::map<std::string, device::ptr> ocl_device_detector::get_available_devices(vo
                                                                               int target_tile_id) const {
     std::vector<device::ptr> devices_list;
     if (user_context != nullptr) {
+        std::cout << "devices_list = create_device_list_from_user_context(user_context, ctx_device_id);" << "\n";
         devices_list = create_device_list_from_user_context(user_context, ctx_device_id);
     } else if (user_device != nullptr) {
+        std::cout << "devices_list = create_device_list_from_user_device(user_device);" << "\n";
         devices_list = create_device_list_from_user_device(user_device);
     } else {
+        std::cout << "devices_list = create_device_list();" << "\n";
         devices_list = create_device_list();
     }
-
+    std::cout << "devices_list size before sort: " << devices_list.size() << "\n";
     devices_list = sort_devices(devices_list);
+    std::cout << "devices_list size after sort: " << devices_list.size() << "\n";
 
     std::map<std::string, device::ptr> ret;
     uint32_t idx = 0;
@@ -190,6 +200,7 @@ std::vector<device::ptr> ocl_device_detector::create_device_list() const {
         return {};
     }
 
+    std::cout << "num_platforms: " << num_platforms << "\n";
     OPENVINO_ASSERT(error_code == CL_SUCCESS, create_device_error_msg, "[GPU] clGetPlatformIDs error code: ", std::to_string(error_code));
     // Get platform list
     std::vector<cl_platform_id> platform_ids(num_platforms);
@@ -198,20 +209,27 @@ std::vector<device::ptr> ocl_device_detector::create_device_list() const {
 
     std::vector<device::ptr> supported_devices;
     for (auto& id : platform_ids) {
+        std::cout << "platform_id: " << id << "\n";
         cl::Platform platform = cl::Platform(id);
 
         try {
             std::vector<cl::Device> devices;
             platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
             for (auto& device : devices) {
-                if (!does_device_match_config(device))
+                uint32_t vendor_id = device.getInfo<CL_DEVICE_VENDOR_ID>();
+                std::cout << "vendor_id: " << vendor_id << "\n";
+                if (!does_device_match_config(device)) {
+                    std::cout << "!does_device_match_config(device)\n";
                     continue;
+                }
                 supported_devices.emplace_back(std::make_shared<ocl_device>(device, cl::Context(device), platform));
+                std::cout << "Add gpu device in supported device list\n";
             }
         } catch (std::exception& ex) {
+            std::cout << "Exception call! std::make_shared<ocl_device>(device, cl::Context(device), platform)\n";
             GPU_DEBUG_LOG << "Devices query/creation failed for " << platform.getInfo<CL_PLATFORM_NAME>() << ": " << ex.what() << std::endl;
             GPU_DEBUG_LOG << "Platform is skipped" << std::endl;
-            continue;
+            //continue;
         }
     }
     return supported_devices;

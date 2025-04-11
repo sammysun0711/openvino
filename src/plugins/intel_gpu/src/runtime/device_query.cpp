@@ -23,6 +23,11 @@ device_query::device_query(engine_types engine_type,
             throw std::runtime_error("Unsupported runtime type for ocl engine");
 
         ocl::ocl_device_detector ocl_detector;
+        std::cout << "engine_type: " << engine_type << "\n";
+        std::cout << "runtime_type: " << runtime_type << "\n";
+        std::cout << "ctx_device_id: " << ctx_device_id << "\n";
+        std::cout << "target_tile_id: " << target_tile_id << "\n";
+        std::cout << "_available_devices = ocl_detector.get_available_devices(user_context, user_device, ctx_device_id, target_tile_id); called!\n";
         _available_devices = ocl_detector.get_available_devices(user_context, user_device, ctx_device_id, target_tile_id);
         break;
     }
