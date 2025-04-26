@@ -497,6 +497,8 @@ ov::Any py_object_to_any(const py::object& py_obj) {
         return py::cast<ov::intel_auto::SchedulePolicy>(py_obj);
     } else if (py::isinstance<ov::hint::SchedulingCoreType>(py_obj)) {
         return py::cast<ov::hint::SchedulingCoreType>(py_obj);
+    } else if (py::isinstance<ov::hint::model>(py_obj)) {
+        return py::cast<ov::hint::model>(py_obj);
     } else if (py::isinstance<py::set>(py_obj)) {
         auto _set = py_obj.cast<py::set>();
 
