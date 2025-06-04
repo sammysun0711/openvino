@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,17 +8,17 @@
 #include "openvino/runtime/isync_infer_request.hpp"
 #include "intel_gpu/plugin/graph.hpp"
 #include "intel_gpu/plugin/remote_tensor.hpp"
-
+// #include "intel_gpu/plugin/async_infer_request.hpp"
 #include <string>
 #include <map>
 #include <vector>
 #include <memory>
 #include <atomic>
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 
 class CompiledModel;
+class AsyncInferRequest;
 
 enum class TensorOwner : uint8_t {
     USER = 0,
@@ -66,6 +66,10 @@ public:
 
     bool use_external_queue() const { return m_use_external_queue; }
 
+    void set_async_request(AsyncInferRequest* asyncRequest);
+
+    void sub_streams_infer();
+
 private:
     void check_tensors() const override;
 
@@ -82,6 +86,7 @@ private:
 
     std::map<cldnn::primitive_id, cldnn::network_output> m_internal_outputs;
     VariablesMap m_variables;
+    AsyncInferRequest* m_asyncRequest = nullptr;
 
     std::shared_ptr<Graph> m_graph;
     RemoteContextImpl::Ptr m_context = nullptr;
@@ -114,12 +119,11 @@ private:
     void allocate_states();
     void allocate_input(const ov::Output<const ov::Node>& port, size_t input_idx);
     void allocate_output(const ov::Output<const ov::Node>& port, size_t output_idx);
-    cldnn::event::ptr copy_output_data(cldnn::memory::ptr src, const ov::ITensor& dst) const;
+    cldnn::event::ptr copy_output_data(cldnn::memory::ptr src, ov::ITensor& dst) const;
 
     void init_mappings();
     bool is_batched_input(const ov::Output<const ov::Node>& port) const;
     uint64_t total_output_bytes = 0;
 };
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu

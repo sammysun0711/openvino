@@ -237,6 +237,14 @@ static constexpr ov::Property<bool> spatial_dyn{"NPUW_SPATIAL_DYN"};
 /**
  * @brief
  * Type: boolean
+ * Force subgraph interconnect tensors to f16 precision if those are in f32
+ * Default value: false
+ */
+static constexpr ov::Property<bool> f16_interconnect{"NPUW_F16IC"};
+
+/**
+ * @brief
+ * Type: boolean
  * When applicable, do embedding gather on host.
  * Default value: true.
  */
@@ -338,9 +346,10 @@ static constexpr ov::Property<bool> full{"NPUW_DUMP_FULL"};
  * @brief
  * Type: std::string.
  * Dump the specified subgraph(s) in OpenVINO IR form in the current directory.
- * Possible values: Comma-separated list of subgraph indices or "YES" for all
- * subgraphs, "NO" or just empty value to turn option off. Keyword "last" can
- * be used for dumping last subgraph without specifying it by specific index.
+ * Possible values: Comma-separated list of subgraph indices ("last" can be used
+ * for dumping last subgraph without specifying it by specific index), "YES" for
+ * all subgraphs, "MIN" for representative subgraph subset (all non-repeated and
+ * one instance of repeated block), "NO" or just empty value to turn option off.
  * E.g. "0,1" or "0,1,last" or "YES".
  * Default value: empty.
  */
@@ -350,9 +359,10 @@ static constexpr ov::Property<std::string> subgraphs{"NPUW_DUMP_SUBS"};
  * @brief
  * Type: std::string.
  * Dump subgraph on disk if a compilation failure happens.
- * Possible values: Comma-separated list of subgraph indices or "YES" for all
- * subgraphs, "NO" or just empty value to turn option off. Keyword "last" can
- * be used for dumping last subgraph. E.g. "0,1" or "0,1,last" or "YES".
+ * Possible values: Comma-separated list of subgraph indices ("last" can be used
+ * for dumping last subgraph) or "YES" for all subgraphs, "MIN" for representative
+ * subgraph subset, "NO" or just empty value to turn option off. E.g. "0,1" or
+ * "0,1,last" or "YES".
  * Default value: empty.
  */
 static constexpr ov::Property<std::string> subgraphs_on_fail{"NPUW_DUMP_SUBS_ON_FAIL"};
@@ -361,9 +371,9 @@ static constexpr ov::Property<std::string> subgraphs_on_fail{"NPUW_DUMP_SUBS_ON_
  * @brief
  * Type: std::string.
  * Dump input & output tensors for subgraph(s).
- * Possible values: Comma-separated list of subgraph indices or "YES" for all
- * subgraphs, "NO" or just empty value to turn option off. Keyword "last" can
- * be used for last subgraph. E.g. "0,1" or "0,1,last" or "YES".
+ * Possible values: Comma-separated list of subgraph indices ("last" can be used for
+ * last subgraph) or "YES" for all subgraphs, "MIN" for representative subgraph subset,
+ * "NO" or just empty value to turn option off. E.g. "0,1" or "0,1,last" or "YES".
  * Default value: empty.
  */
 static constexpr ov::Property<std::string> inputs_outputs{"NPUW_DUMP_IO"};
@@ -432,6 +442,16 @@ static constexpr ov::Property<bool> optimize_v_tensors{"NPUW_LLM_OPTIMIZE_V_TENS
 
 /**
  * @brief
+ * Type: std::string.
+ * Hint for prefill stage. NPUW will use optimal configuration based on the passed preference via hint.
+ * Passing this hint with "NPUW_LLM_PREFILL_CONFIG" will generate a error.
+ * Possible values: "DYNAMIC", "STATIC".
+ * Default value: "STATIC".
+ */
+static constexpr ov::Property<std::string> prefill_hint{"NPUW_LLM_PREFILL_HINT"};
+
+/**
+ * @brief
  * Type: ov::AnyMap.
  * Configuration for compilation of prefill model.
  * NOTE: !! Write-only !!
@@ -442,7 +462,7 @@ static constexpr ov::Property<ov::AnyMap> prefill_config{"NPUW_LLM_PREFILL_CONFI
  * @brief
  * Type: std::string.
  * Hint for generation stage. NPUW will use optimal configuration based on the passed preference via hint.
- * Hint is ignored if used with "NPUW_LLM_GENERATE_CONFIG".
+ * Passing this hint with "NPUW_LLM_GENERATE_CONFIG" will generate a error.
  * Possible values: "FAST_COMPILE", "BEST_PERF".
  * Default value: "FAST_COMPILE".
  */

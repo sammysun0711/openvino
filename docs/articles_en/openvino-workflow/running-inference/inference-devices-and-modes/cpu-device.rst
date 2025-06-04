@@ -75,7 +75,7 @@ CPU plugin supports the following data types as inference precision of internal 
   - ``INT8`` (Intel® x86-64)
   - ``uINT1`` (Intel® x86-64)
 
-:doc:`Hello Query Device C++ Sample <../../../learn-openvino/openvino-samples/hello-query-device>` can be used to print out supported data types for all detected devices.
+:doc:`Hello Query Device C++ Sample <../../../get-started/learn-openvino/openvino-samples/hello-query-device>` can be used to print out supported data types for all detected devices.
 
 
 Quantized Data Types Specifics
@@ -284,7 +284,7 @@ with the static input shape to get the best performance.
          :fragment: [static_shape]
 
 
-For more details, see the :doc:`dynamic shapes guide <../dynamic-shapes>`.
+For more details, see the :doc:`dynamic shapes guide <../model-input-output/dynamic-shapes>`.
 
 Preprocessing Acceleration
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -336,7 +336,7 @@ Stateful Models
 
 The CPU plugin supports stateful models without any limitations.
 
-For details, see :doc:`stateful models guide <../stateful-models>`.
+For details, see :doc:`stateful models guide <../inference-request/stateful-models>`.
 
 Supported Properties
 ###########################################################
@@ -355,6 +355,7 @@ All parameters must be set before calling ``ov::Core::compile_model()`` in order
 - ``ov::hint::num_request``
 - ``ov::hint::scheduling_core_type``
 - ``ov::hint::enable_hyper_threading``
+- ``ov::hint::enable_cpu_reservation``
 - ``ov::hint::enable_cpu_pinning``
 - ``ov::num_streams``
 - ``ov::inference_num_threads``

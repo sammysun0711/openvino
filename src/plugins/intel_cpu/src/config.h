@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -37,6 +37,12 @@ struct Config {
         Disable,
     };
 
+    enum CacheQuantMode {
+        AUTO,
+        BY_CHANNEL,
+        BY_HIDDEN,
+    };
+
     enum class ModelType { CNN, LLM, Unknown };
 
     bool collectPerfCounters = false;
@@ -48,17 +54,29 @@ struct Config {
     uint64_t fcDynamicQuantizationGroupSize = 32;
     bool fcDynamicQuantizationGroupSizeSetExplicitly = false;
     bool kvCachePrecisionSetExplicitly = false;
+    bool keyCachePrecisionSetExplicitly = false;
+    bool valueCachePrecisionSetExplicitly = false;
+    bool keyCacheGroupSizeSetExplicitly = false;
+    bool valueCacheGroupSizeSetExplicitly = false;
 #if defined(OV_CPU_WITH_ACL)
     bool aclFastMath = false;
 #endif
 #if defined(OPENVINO_ARCH_X86_64)
     ov::element::Type kvCachePrecision = ov::element::u8;
+    ov::element::Type keyCachePrecision = ov::element::u8;
+    ov::element::Type valueCachePrecision = ov::element::u8;
     size_t rtCacheCapacity = 5000ul;
 #else
     ov::element::Type kvCachePrecision = ov::element::f16;
+    ov::element::Type keyCachePrecision = ov::element::f16;
+    ov::element::Type valueCachePrecision = ov::element::f16;
     // TODO: Executor cache may leads to incorrect behavior on oneDNN ACL primitives
     size_t rtCacheCapacity = 0ul;
 #endif
+    size_t keyCacheGroupSize = 0ul;
+    size_t valueCacheGroupSize = 0ul;
+    CacheQuantMode keyCacheQuantMode = CacheQuantMode::AUTO;
+    CacheQuantMode valueCacheQuantMode = CacheQuantMode::AUTO;
     ov::threading::IStreamsExecutor::Config streamExecutorConfig;
     int streams = 1;
     bool streamsChanged = false;
@@ -71,6 +89,7 @@ struct Config {
     uint32_t hintNumRequests = 0;
     bool enableCpuPinning = true;
     bool changedCpuPinning = false;
+    bool enableCpuReservation = false;
     ov::hint::SchedulingCoreType schedulingCoreType = ov::hint::SchedulingCoreType::ANY_CORE;
     std::set<ov::hint::ModelDistributionPolicy> modelDistributionPolicy = {};
     int streamsRankLevel = 1;
@@ -78,7 +97,7 @@ struct Config {
     bool enableNodeSplit = false;
     bool enableHyperThreading = true;
     bool changedHyperThreading = false;
-#if defined(OPENVINO_ARCH_X86) || defined(OPENVINO_ARCH_X86_64)
+#if defined(OPENVINO_ARCH_X86) || defined(OPENVINO_ARCH_X86_64) || defined(OPENVINO_ARCH_ARM64)
     LPTransformsMode lpTransformsMode = LPTransformsMode::On;
 #else
     // Currently INT8 mode is not optimized on ARM / RISCV or other non-x86 platforms, fallback to FP32 mode.

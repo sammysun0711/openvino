@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
@@ -44,8 +44,8 @@ except:
 
 # pylint: disable=no-name-in-module,import-error
 from openvino.frontend import FrontEndManager, OpConversionFailure, TelemetryExtension
-from openvino.runtime import get_version as get_rt_version
-from openvino.runtime import PartialShape
+from openvino import get_version as get_rt_version
+from openvino import PartialShape
 
 try:
     from openvino.frontend.tensorflow.utils import create_tf_graph_iterator, type_supported_by_tf_fe, \
@@ -208,7 +208,8 @@ def check_model_object(argv):
             return "tf"
     if 'torch' in sys.modules:
         import torch
-        if isinstance(model, (torch.nn.Module, torch.jit.ScriptFunction)) or (hasattr(torch, "export") and isinstance(model, (torch.export.ExportedProgram))):
+        if isinstance(model, (torch.nn.Module, torch.jit.ScriptFunction)) or (
+                hasattr(torch, "export") and isinstance(model, (torch.export.ExportedProgram))):
             return "pytorch"
         try:
             from openvino.frontend.pytorch.ts_decoder import TorchScriptPythonDecoder
@@ -236,7 +237,13 @@ def check_model_object(argv):
 
     if 'jax' in sys.modules:
         import jax
-        if isinstance(model, (jax.core.Jaxpr, jax.core.ClosedJaxpr)):
+        from packaging import version
+        if version.parse(jax.__version__) < version.parse("0.6.0"):
+            import jax as jex
+            import jax.core
+        else:
+            import jax.extend as jex
+        if isinstance(model, (jex.core.Jaxpr, jex.core.ClosedJaxpr)):
             return "jax"
 
     raise Error('Unknown model type: {}'.format(type(model)))
@@ -478,6 +485,12 @@ def _convert(cli_parser: argparse.ArgumentParser, args, python_api_used):
                     get_jax_decoder(args['input_model'], args)
                 else:
                     raise Error("JAX Frontend is not available.")
+            if model_framework == "tf" and "nncf" in sys.modules:
+                try:
+                    from nncf.tensorflow.strip import strip as nncf_tf_strip
+                    args['input_model'] = nncf_tf_strip(args['input_model'])
+                except:
+                    pass
 
         argv = pack_params_to_args_namespace(args, cli_parser, python_api_used)
 

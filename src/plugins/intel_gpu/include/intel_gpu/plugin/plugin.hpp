@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2024 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,13 +6,16 @@
 
 #include "openvino/runtime/iplugin.hpp"
 #include "intel_gpu/plugin/remote_context.hpp"
+#include "intel_gpu/plugin/tuple_remote_context.hpp"
 #include "intel_gpu/runtime/engine.hpp"
+#include "openvino/runtime/threading/cpu_message.hpp"
+#include "intel_gpu/plugin/remote_tensor.hpp"
+#include "intel_gpu/plugin/tuple_remote_tensor.hpp"
 #include <map>
 #include <string>
 #include <memory>
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 
 class Plugin : public ov::IPlugin {
 private:
@@ -25,6 +28,8 @@ private:
     mutable std::once_flag m_default_contexts_once;
 
     std::map<std::string, std::shared_ptr<RemoteContextImpl>> get_default_contexts() const;
+
+    std::shared_ptr<RemoteContextImpl> get_multi_device_context(std::string& device_id, cldnn::device::ptr) const;
 
     std::shared_ptr<ov::Model> clone_and_transform_model(const std::shared_ptr<const ov::Model>& network,
                                                          const ExecutionConfig& config,
@@ -44,7 +49,11 @@ private:
 
     bool is_metric(const std::string& name) const;
     ov::Any get_metric(const std::string& name, const ov::AnyMap& arguments) const;
-    void set_cache_info(const std::shared_ptr<const ov::Model>& model, ExecutionConfig& properties) const;
+
+    std::shared_ptr<ov::threading::MessageManager> m_msg_manager;
+
+    mutable std::map<std::string, RemoteContextImpl::Ptr> contexts_for_tp;
+    mutable std::vector<std::string> device_ids;
 
 public:
     Plugin();
@@ -67,5 +76,4 @@ public:
     ov::SoPtr<ov::IRemoteContext> get_default_context(const ov::AnyMap& remote_properties) const override;
 };
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu

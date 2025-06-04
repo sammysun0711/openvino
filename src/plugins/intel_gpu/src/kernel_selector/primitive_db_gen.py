@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 # To add new kernel please add a .cl file to kernels directory
 # the database name will be the part of the file name up to first '.' character
@@ -241,12 +241,12 @@ class Kernels2CHeaders(object):
             return
 
         # Remove comments
-        content = comment_regexp.sub(comment_replacer, content)
+        # content = comment_regexp.sub(comment_replacer, content)
         # Remove empty lines
-        content = os.linesep.join([s for s in content.splitlines() if s])
+        # content = os.linesep.join([s for s in content.splitlines() if s])
         # Remove multiple spaces
-        content = content.replace("\\\n", "")
-        content = re.sub(' +', ' ', content)
+        # content = content.replace("\\\n", "")
+        # content = re.sub(' +', ' ', content)
 
         return content
 

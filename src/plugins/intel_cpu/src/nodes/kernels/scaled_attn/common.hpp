@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 #pragma once
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "openvino/core/type/bfloat16.hpp"
+#include "openvino/core/type/element_type.hpp"
 #include "openvino/core/type/float16.hpp"
 
 #if defined(HAVE_SSE) || defined(HAVE_AVX2) || defined(HAVE_AVX512F)
@@ -23,10 +24,7 @@
 #    include "arm_neon.h"
 #endif
 
-namespace ov {
-namespace Extensions {
-namespace Cpu {
-namespace XARCH {
+namespace ov::Extensions::Cpu::XARCH {
 
 // avx512/avx2 register length in byte
 static constexpr size_t vec_len_avx512 = 64lu;
@@ -48,6 +46,21 @@ inline size_t vec_len_f16_sve() {
     return len;
 }
 #endif
+
+constexpr size_t get_sub_byte_multiplier(ov::element::Type type) {
+    return (type == ov::element::i4 || type == ov::element::u4) ? 2 : 1;
+}
+
+uint8_t inline insert_half_byte(uint8_t dst, uint8_t val, bool high_half) {
+    uint8_t shift = high_half ? 0 : 4;
+    return dst | static_cast<uint8_t>(val << shift);
+}
+
+uint8_t inline extract_half_byte(uint8_t val, bool high_half) {
+    uint8_t shift = high_half ? 0 : 4;
+
+    return static_cast<uint8_t>((val >> shift) & 0x000F);
+};
 
 #ifdef HAVE_AVX512F
 inline __m512 cvt_bf16_to_fp32(const __m256i src) {
@@ -148,22 +161,62 @@ inline void mm512_uni_storeu_tail_ps(ov::float16* addr, __m512 v, size_t count) 
     __m256i vec_f16 = _mm512_cvtps_ph(v, 0);
     _mm256_mask_storeu_epi16(reinterpret_cast<__m256i*>(addr), mask_addr, vec_f16);
 }
+
+inline void mm512_loadu_u4_to_f32(uint8_t* src_data, __m512& first_half, __m512& second_half) {
+    auto data = _mm_loadu_si128(reinterpret_cast<__m128i*>(src_data));
+    auto v_i32 = _mm512_cvtepu8_epi32(data);
+
+    auto v_512_low_half = _mm512_srli_epi32(v_i32, 4);
+    auto v_f32_low_half = _mm512_cvtepi32_ps(v_512_low_half);
+
+    auto mask = _mm512_set1_epi32(0x0F);
+    auto v_512_high_half = _mm512_and_si512(v_i32, mask);
+    auto v_f32_high_half = _mm512_cvtepi32_ps(v_512_high_half);
+    __m512i idx1 = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    __m512i idx2 = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    first_half = _mm512_permutex2var_ps(v_f32_low_half, idx1, v_f32_high_half);
+    second_half = _mm512_permutex2var_ps(v_f32_low_half, idx2, v_f32_high_half);
+}
+
+inline void mm512_storeu_u4(uint8_t* dst_data, __m512i& v0, __m512i& v1) {
+    __m512i idx1 = _mm512_set_epi32(30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0);
+    __m512i idx2 = _mm512_set_epi32(31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1);
+    auto first_half = _mm512_permutex2var_epi32(v0, idx1, v1);
+    auto second_half = _mm512_permutex2var_epi32(v0, idx2, v1);
+    first_half = _mm512_slli_epi32(first_half, 4);
+    auto mask = _mm512_set1_epi32(0x0F);
+    second_half = _mm512_and_epi32(second_half, mask);
+    auto combined = _mm512_or_epi32(first_half, second_half);
+    _mm512_mask_cvtepi32_storeu_epi8(dst_data, 0xffff, combined);
+}
+
 #endif
 
 #ifdef HAVE_AVX2
+inline __m128i get_8bit_tail_mask_for_16bit_elts(size_t num_16bit_tail_elts) {
+    // num_tail_elts may take from 0 to 8
+    static int8_t masks[9][16] = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
+    return _mm_loadu_si128(reinterpret_cast<__m128i*>(masks[num_16bit_tail_elts]));
+}
 inline __m256i get_mask(int N7) {
-    static __m256i mask[] = {
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0),
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, -1),
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, -1, -1),
-        _mm256_set_epi32(0, 0, 0, 0, 0, -1, -1, -1),
-        _mm256_set_epi32(0, 0, 0, 0, -1, -1, -1, -1),
-        _mm256_set_epi32(0, 0, 0, -1, -1, -1, -1, -1),
-        _mm256_set_epi32(0, 0, -1, -1, -1, -1, -1, -1),
-        _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1),
-        _mm256_set_epi32(-1, -1, -1, -1, -1, -1, -1, -1),
-    };
-    return _mm256_loadu_si256(&mask[N7]);
+    static int32_t masks[9][8] = {{0, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, 0, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, 0, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, 0, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, 0, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, 0, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, 0, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, 0},
+                                  {-1, -1, -1, -1, -1, -1, -1, -1}};
+    return _mm256_loadu_si256(reinterpret_cast<__m256i*>(masks[N7]));
 }
 
 // load addr to __m256 reg
@@ -207,7 +260,7 @@ inline void mm256_uni_storeu_ps(float* a, __m256 v) {
     _mm256_storeu_ps(a, v);
 }
 
-inline void mm256_uni_storeu_ps(ov::bfloat16* addr, __m256 xps) {
+inline __m128i __convert_avx2_packed_float_to_packed_ov_bfloat16(__m256 xps) {
     __m256i xpi32 = _mm256_castps_si256(xps);
     __m256i nan = _mm256_set1_epi32(0xffff);
     __m256i mask = _mm256_castps_si256(_mm256_cmp_ps(xps, xps, _CMP_ORD_Q));
@@ -220,6 +273,11 @@ inline void mm256_uni_storeu_ps(ov::bfloat16* addr, __m256 xps) {
     x = _mm256_packus_epi32(x, x);
     x = _mm256_permute4x64_epi64(x, 0xd8);
     __m128i bf16_o = _mm256_extractf128_si256(x, 0);
+    return bf16_o;
+}
+
+inline void mm256_uni_storeu_ps(ov::bfloat16* addr, __m256 xps) {
+    __m128i bf16_o = __convert_avx2_packed_float_to_packed_ov_bfloat16(xps);
     _mm_storeu_si128(reinterpret_cast<__m128i*>(addr), bf16_o);
 }
 
@@ -230,8 +288,69 @@ inline void mm256_uni_storeu_ps(ov::float16* a, __m256 v) {
 
 // store __m256 to addr
 inline void mm256_uni_storeu_tail_ps(float* addr, __m256 v, size_t count) {
-    const auto mask = get_mask(count);
+    auto mask = get_mask(count);
     return _mm256_maskstore_ps(addr, mask, v);
+}
+
+inline void mm256_uni_storeu_tail_ps(ov::float16* addr, __m256 v, size_t count) {
+    auto mask = get_8bit_tail_mask_for_16bit_elts(count);
+    __m128i vec_f16 = _mm256_cvtps_ph(v, 0);
+    return _mm_maskmoveu_si128(vec_f16, mask, reinterpret_cast<char*>(addr));
+}
+
+inline void mm256_uni_storeu_tail_ps(ov::bfloat16* addr, __m256 v, size_t count) {
+    auto mask = get_8bit_tail_mask_for_16bit_elts(count);
+    __m128i bf16_o = __convert_avx2_packed_float_to_packed_ov_bfloat16(v);
+    return _mm_maskmoveu_si128(bf16_o, mask, reinterpret_cast<char*>(addr));
+}
+
+inline void mm256_loadu_u4_to_f32(uint8_t* src, __m256& first_half, __m256& second_half) {
+    auto data = _mm_loadl_epi64(reinterpret_cast<__m128i*>(src));
+
+    auto v_i32 = _mm256_cvtepu8_epi32(data);
+    auto v_256_low_half = _mm256_srli_epi32(v_i32, 4);
+    auto v_f32_low_half = _mm256_cvtepi32_ps(v_256_low_half);
+
+    auto mask = _mm256_set1_epi32(0x0F);
+    auto v_256_high_half = _mm256_and_si256(v_i32, mask);
+    auto v_f32_high_half = _mm256_cvtepi32_ps(v_256_high_half);
+
+    // 0,2,4,6,8,10,12,14 | 1,3,5,7,9,11,13,15
+    //         _mm256_permute2f128_ps
+    // 0,2,4,6,1,3,5,7    | 8,10,12,14,9,11,13,15
+    //         _mm256_permutevar8x32_ps
+    // 0,1,2,3,4,5,6,7    | 8,9,10,11,12,13,14,15
+    first_half = _mm256_permute2f128_ps(v_f32_low_half, v_f32_high_half, 0x20);
+    auto idx1 = _mm256_set_epi32(7, 3, 6, 2, 5, 1, 4, 0);
+    first_half = _mm256_permutevar8x32_ps(first_half, idx1);
+    second_half = _mm256_permute2f128_ps(v_f32_low_half, v_f32_high_half, 0x31);
+    second_half = _mm256_permutevar8x32_ps(second_half, idx1);
+}
+
+inline void mm256_storeu_u4(uint8_t* dst_data, __m256i& v0_i32, __m256i& v1_i32) {
+    auto idx1 = _mm256_set_epi32(7, 5, 3, 1, 6, 4, 2, 0);
+    v0_i32 = _mm256_permutevar8x32_epi32(v0_i32, idx1);
+    v1_i32 = _mm256_permutevar8x32_epi32(v1_i32, idx1);
+    //    0,1,2,3,4,5,6,7 | 8,9,10,11,12,13,14,15
+    //       _mm256_permutevar8x32_epi32
+    //    0,2,4,6,1,3,5,7 | 8,10,12,14,9,11,13,15
+    //       _mm256_permute2x128_si256
+    // 0,2,4,6,8,10,12,14 | 1,3,5,7,9,11,13,15
+    //          shift + mask + or
+    //     [0,1],[2,3], ..., [12,13], [14,15]
+    auto first_half = _mm256_permute2x128_si256(v0_i32, v1_i32, 0x20);
+    auto second_half = _mm256_permute2x128_si256(v0_i32, v1_i32, 0x31);
+    first_half = _mm256_slli_epi32(first_half, 4);
+    auto mask = _mm256_set1_epi32(0x0F);
+    second_half = _mm256_and_si256(second_half, mask);
+    auto combined = _mm256_or_si256(first_half, second_half);
+
+    auto high4 = _mm256_extractf128_si256(combined, 1);
+    auto low4 = _mm256_castsi256_si128(combined);
+    // ignore sign bit for u4 case
+    auto packed = _mm_packus_epi32(low4, high4);
+    packed = _mm_packus_epi16(packed, packed);
+    _mm_storel_epi64(reinterpret_cast<__m128i*>(dst_data), packed);
 }
 
 inline void hsum(__m256& x) {
@@ -448,7 +567,26 @@ inline float16_t hsum(float16x8_t vec) {
     return vget_lane_f16(sum3, 0);
 }
 #endif
-}  // namespace XARCH
-}  // namespace Cpu
-}  // namespace Extensions
-}  // namespace ov
+
+template <typename TA, typename TB>
+void cvt_copy(TA* a, TB* b, size_t m, size_t n, size_t src_stride, size_t dst_stride) {
+    for (size_t j = 0; j < m; j++) {
+        size_t i = 0;
+#if defined(HAVE_AVX512F)
+        for (; i + vec_len_f32_avx512 <= n; i += vec_len_f32_avx512) {
+            auto vb = mm512_uni_loadu_ps(b + i + j * src_stride);
+            mm512_uni_storeu_ps(a + i + j * dst_stride, vb);
+        }
+#elif defined(HAVE_AVX2)
+        for (; i + vec_len_f32_avx2 <= n; i += vec_len_f32_avx2) {
+            auto vb = mm256_uni_loadu_ps(b + i + j * src_stride);
+            mm256_uni_storeu_ps(a + i + j * dst_stride, vb);
+        }
+#endif
+        for (; i < n; i++) {
+            a[i + j * dst_stride] = b[i + j * src_stride];
+        }
+    }
+}
+
+}  // namespace ov::Extensions::Cpu::XARCH

@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -11,8 +11,8 @@ import pytest
 import torch
 from common.mo_convert_test_class import CommonMOConvertTest
 
-import openvino.runtime as ov
-from openvino.runtime import PartialShape, Dimension, Model, Type
+import openvino as ov
+from openvino import PartialShape, Dimension, Model, Type
 
 
 class MyTorchOp(torch.autograd.Function):
@@ -1012,6 +1012,100 @@ def create_pytorch_module_with_output(tmp_dir):
         ), "output": "some_name"}
 
 
+def create_pytorch_module_with_none_example(tmp_dir):
+    class PTModel(torch.nn.Module):
+        def forward(self, a, b):
+            if b is None:
+                b = torch.tensor(1., dtype=torch.float32)
+            return a + b
+
+    net = PTModel()
+    a = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    add = ov.opset10.add(a, np.float32([1.]))
+    ref_model = Model([add], [a], "test")
+    return net, ref_model, {
+        "example_input": (
+            torch.tensor([5, 6], dtype=torch.float32),
+            None
+        ),
+        "compress_to_fp16": False}
+
+
+def create_pytorch_module_with_none_dict_example(tmp_dir):
+    class PTModel(torch.nn.Module):
+        def forward(self, a, b):
+            if b is None:
+                b = torch.tensor(1., dtype=torch.float32)
+            return a + b
+
+    net = PTModel()
+    a = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    add = ov.opset10.add(a, np.float32([1.]))
+    ref_model = Model([add], [a], "test")
+    return net, ref_model, {
+        "example_input": {
+            "a": torch.tensor([5, 6], dtype=torch.float32),
+            "b": None,
+        },
+        "compress_to_fp16": False}
+
+
+def create_pytorch_module_with_none_in_tuple(tmp_dir):
+    class PTModel(torch.nn.Module):
+        def forward(self, a, b):
+            x = a[0]
+            if a[1] is None:
+                x = x + torch.tensor(1., dtype=torch.float32)
+            else:
+                x = x + a[1]
+            if a[2] is None:
+                x = x + torch.tensor(1., dtype=torch.float32)
+            else:
+                x = x + a[2]
+            return x + b
+
+    net = PTModel()
+    a = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    b = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    add = ov.opset10.add(a, np.float32([2.]))
+    add2 = ov.opset10.add(add, b)
+    ref_model = Model([add2], [a, b], "test")
+    return net, ref_model, {
+        "example_input": {
+            "a": (torch.tensor([5, 6], dtype=torch.float32), None, None),
+            "b": torch.tensor([5, 6], dtype=torch.float32),
+        },
+        "compress_to_fp16": False}
+
+
+def create_pytorch_module_with_none_in_tuple_case2(tmp_dir):
+    class PTModel(torch.nn.Module):
+        def forward(self, a, b):
+            x = a[0]
+            if a[1] is None:
+                x = x + torch.tensor(1., dtype=torch.float32)
+            else:
+                x = x + a[1]
+            if a[2] is None:
+                x = x + torch.tensor(1., dtype=torch.float32)
+            else:
+                x = x + a[2]
+            return x + b
+
+    net = PTModel()
+    a = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    add = ov.opset10.add(a, np.float32([2.]))
+    b = ov.opset10.parameter(PartialShape([-1]), dtype=np.float32)
+    add2 = ov.opset10.add(add, b)
+    ref_model = Model([add2], [a, b], "test")
+    return net, ref_model, {
+        "example_input": (
+            (torch.tensor([5, 6], dtype=torch.float32), None, None),
+            torch.tensor([5, 6], dtype=torch.float32),
+        ),
+        "compress_to_fp16": False}
+
+
 class TestMoConvertPyTorch(CommonMOConvertTest):
     test_data = [
         'create_pytorch_nn_module_case1',
@@ -1062,14 +1156,18 @@ class TestMoConvertPyTorch(CommonMOConvertTest):
         'create_pytorch_module_with_nested_inputs6',
         'create_pytorch_module_with_nested_list_and_single_input',
         'create_pytorch_module_with_single_input_as_list',
-        'create_pytorch_module_with_nested_dict_input'
+        'create_pytorch_module_with_nested_dict_input',
+        'create_pytorch_module_with_none_example',
+        'create_pytorch_module_with_none_dict_example',
+        'create_pytorch_module_with_none_in_tuple',
+        'create_pytorch_module_with_none_in_tuple_case2',
     ]
 
     @pytest.mark.parametrize("create_model", test_data)
     @pytest.mark.nightly
     @pytest.mark.precommit
     def test_mo_import_from_memory(self, create_model, ie_device, precision, ir_version,
-                                   temp_dir, use_legacy_frontend):
+                                   temp_dir):
         fw_model, graph_ref, mo_params = eval(create_model)(temp_dir)
 
         test_params = {'input_model': fw_model}
@@ -1085,7 +1183,7 @@ class TestMoConvertPyTorch(CommonMOConvertTest):
     @pytest.mark.precommit
     def test_mo_import_from_memory_negative(self, create_model, exception,
                                             ie_device, precision, ir_version,
-                                            temp_dir, use_legacy_frontend):
+                                            temp_dir):
         fw_model, graph_ref, mo_params = eval(create_model)(temp_dir)
 
         test_params = {'input_model': fw_model}
@@ -1243,7 +1341,7 @@ class TestPytorchConversionParams(CommonMOConvertTest):
     @pytest.mark.parametrize("params", test_data)
     @pytest.mark.nightly
     def test_conversion_params(self, params, ie_device, precision, ir_version,
-                               temp_dir, use_legacy_frontend):
+                               temp_dir):
         fw_model = params['fw_model']
         test_params = params['params_test']
         ref_model = params['ref_model']
@@ -1315,7 +1413,7 @@ class TestConvertModelForPyTorchModelOnDisk(CommonMOConvertTest):
     @pytest.mark.precommit
     def test_convert_model_for_pytorch_model_on_disk(self, create_model, model_format,
                                                      ie_device, precision, ir_version,
-                                                     temp_dir, use_legacy_frontend):
+                                                     temp_dir):
         fw_model, graph_ref, ovc_params = eval(create_model)(temp_dir)
 
         with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
@@ -1396,7 +1494,7 @@ class TestOVCForExportedProgramOnDisk(CommonMOConvertTest):
     @pytest.mark.precommit
     def test_ovc_for_exported_program_on_disk(self, create_model,
                                               ie_device, precision, ir_version,
-                                              temp_dir, use_legacy_frontend):
+                                              temp_dir):
         fw_model, graph_ref, ovc_params = eval(create_model)(temp_dir)
         example_input = ovc_params['example_input']
         del ovc_params['example_input']

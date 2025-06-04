@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -22,6 +22,8 @@ public:
     std::map<std::string, device::ptr> get_available_devices(void *user_context, void *user_device, int ctx_device_id = 0, int target_tile_id = -1) const;
 
     static std::vector<device::ptr> sort_devices(const std::vector<device::ptr>& devices_list);
+
+    std::vector<device::ptr> create_device_with_multiple_context(const std::vector<int>& ctx_device_ids) const;
 
 private:
     std::vector<device::ptr> create_device_list() const;

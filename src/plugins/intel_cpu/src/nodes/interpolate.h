@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -74,14 +74,14 @@ public:
     static constexpr float PILLOW_BICUBIC_WINDOW_SCALE = 2.0f;
 
 public:
-    Interpolate(const std::shared_ptr<ov::Node>& op, const GraphContext::CPtr context);
+    Interpolate(const std::shared_ptr<ov::Node>& op, const GraphContext::CPtr& context);
 
     void getSupportedDescriptors() override;
     void initSupportedPrimitiveDescriptors() override;
     void createPrimitive() override;
     bool created() const override;
-    void execute(dnnl::stream strm) override;
-    void executeDynamicImpl(dnnl::stream strm) override;
+    void execute(const dnnl::stream& strm) override;
+    void executeDynamicImpl(const dnnl::stream& strm) override;
     bool canBeInPlace() const override {
         return false;
     }
@@ -99,14 +99,6 @@ public:
 private:
     bool is_version11 = true;
     InterpolateAttrs interpAttrs;
-    // Some FEs or preprocessing step resize spatial dimension for tensor with NHWC layout memory,
-    // but imported as planar layout[abcd] with axis[1,2] for convenience. In this case, for pillow modes without pad
-    // for now, nhwc layout path and the kernel(nhwc layout executor) can be used for this planar layout and axis
-    // settings(NCHWAsNHWC is true) to get higher perf with
-    // 1. logical shape alignment [abcd-nhwc] to [adbc-nchw].
-    // 2. axis alignment [1,2] to [2,3].
-    // 3. config planar layout support and treated it as channel_first layout.
-    bool NCHWAsNHWC = false;
     size_t dataRank = 0;
 
     class InterpolateExecutorBase {
@@ -170,8 +162,8 @@ private:
         VectorDims srcDimPad5d, dstDim5d;
         ov::element::Type inputPrec, outputPrec;
         size_t srcDataSize, dstDataSize;
-        int spatialDimSize;
         size_t dataRank;
+        int spatialDimSize;
         std::vector<int> auxTable;
         std::vector<uint8_t> pillow_working_buf;
         size_t m_threads_num = 0lu;
@@ -280,7 +272,8 @@ private:
                                const std::vector<float>& _dataScales)
             : InterpolateExecutorBase(interpAttrs, srcDims, dstDims, _dataScales),
               antialias(interpAttrs.antialias),
-              dataScales(_dataScales) {}
+              dataScales(_dataScales),
+              refInterpAttrs(interpAttrs) {}
 
         void exec(const uint8_t* in_ptr_, uint8_t* out_ptr_, const void* post_ops_data_) override;
 
@@ -315,6 +308,8 @@ private:
                                  int kernel_width,
                                  bool antialias);
         void pillowRef(const uint8_t* in_ptr_, uint8_t* out_ptr_, int B, int C, int IH, int IW, int OH, int OW);
+        void
+        pillowRefNCHWAsNHWC(const uint8_t* in_ptr_, uint8_t* out_ptr_, int B, int C, int IH, int IW, int OH, int OW);
 
         static float getValue(const uint8_t* base, size_t offset, ov::element::Type prec);
         static void setValue(uint8_t* base, size_t offset, float value, ov::element::Type prec);
@@ -322,6 +317,7 @@ private:
     private:
         bool antialias;
         std::vector<float> dataScales;
+        InterpolateAttrs refInterpAttrs;
     };
 
     void setPostOps(dnnl::primitive_attr& attr, const VectorDims& dims);
@@ -346,8 +342,6 @@ private:
     std::vector<int32_t> lastSizes;
 
     VectorDims lastOutputDims;
-
-    std::string errorPrefix;
 
     bool canUseAclExecutor = false;
     std::shared_ptr<InterpolateExecutor> aclExecPtr = nullptr;

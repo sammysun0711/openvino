@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,9 +13,7 @@
 using namespace ov::intel_cpu::brgemm_utils::repacking;
 using namespace ov::snippets::lowered;
 
-namespace ov {
-namespace intel_cpu {
-namespace pass {
+namespace ov::intel_cpu::pass {
 
 bool InsertBrgemmCopyBuffers::run(LinearIR& linear_ir, LinearIR::constExprIt begin, LinearIR::constExprIt end) {
     OV_ITT_SCOPED_TASK(ov::pass::itt::domains::SnippetsTransform, "Snippets::InsertBrgemmCopyBuffers")
@@ -57,6 +55,7 @@ bool InsertBrgemmCopyBuffers::run(LinearIR& linear_ir, LinearIR::constExprIt beg
         OPENVINO_ASSERT(!ov::snippets::utils::is_dynamic_value(M_blk), "M blk cannot be dynamic!");
 
         const auto vnni_factor = brgemm_utils::compute_vnni_factor(src_dt);
+        OPENVINO_ASSERT(vnni_factor > 0, "vnni_factor cannot be zero!");
         const auto inner_k_blk = brgemm_utils::repacking::compute_inner_k_block(src_dt);
         OPENVINO_ASSERT(inner_k_blk > 0, "inner_k_blk cannot be zero!");
         const auto tile_scratch_size = BrgemmCPU::SCRATCH_BYTE_SIZE;
@@ -81,7 +80,7 @@ bool InsertBrgemmCopyBuffers::run(LinearIR& linear_ir, LinearIR::constExprIt beg
 
     bool modified = false;
     for (auto expr_it = begin; expr_it != end; ++expr_it) {
-        const auto brgemm_expr = *expr_it;
+        const auto& brgemm_expr = *expr_it;
         if (const auto brgemm_cpu = ov::as_type_ptr<ov::intel_cpu::BrgemmCPU>(brgemm_expr->get_node())) {
             if (brgemm_utils::with_repacking(brgemm_cpu->get_type())) {
                 // BrgemmCopyB might be extracted from the body
@@ -105,6 +104,4 @@ bool InsertBrgemmCopyBuffers::run(LinearIR& linear_ir, LinearIR::constExprIt beg
     return modified;
 }
 
-}  // namespace pass
-}  // namespace intel_cpu
-}  // namespace ov
+}  // namespace ov::intel_cpu::pass

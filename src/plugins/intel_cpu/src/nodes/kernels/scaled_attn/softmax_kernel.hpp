@@ -1,9 +1,11 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 #pragma once
 
 #include <array>
+#include <cfloat>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -19,10 +21,7 @@
 #    include "arm_neon.h"
 #endif
 
-namespace ov {
-namespace Extensions {
-namespace Cpu {
-namespace XARCH {
+namespace ov::Extensions::Cpu::XARCH {
 
 #if defined(HAVE_AVX2)
 inline void exp_ps_avx2(__m256& src) {
@@ -242,7 +241,7 @@ inline void scale_add2_reduce_max(float* a,
         }
 
         if (has_causal_mask) {
-            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(causal_mask + i));
+            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(causal_mask + i));
             auto v_maski32 = _mm512_cvtepi8_epi32(v_maski8);
             auto kmask = _mm512_cmp_epi32_mask(v_maski32, v_zeroi32, _MM_CMPINT_NE);  // !=0
             kmask = _kxor_mask16(kmask, kmask_xor);                                   // reverse, mask at ==0
@@ -270,7 +269,7 @@ inline void scale_add2_reduce_max(float* a,
         }
 
         if (has_causal_mask) {
-            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(causal_mask + i));
+            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(causal_mask + i));
             auto v_maski32 = _mm512_cvtepi8_epi32(v_maski8);
             auto kmask = _mm512_cmp_epi32_mask(v_maski32, v_zeroi32, _MM_CMPINT_NE);  // !=0
             kmask = _kxor_mask16(kmask, kmask_xor);                                   // reverse, mask at ==0
@@ -343,7 +342,7 @@ inline void scale_add2_reduce_max(float* a,
         }
 
         if (has_causal_mask) {
-            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(causal_mask + i));
+            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(causal_mask + i));
             auto v_maski32 = _mm256_cvtepi8_epi32(v_maski8);
             v_maski32 = _mm256_cmpeq_epi32(v_maski32, v_zeroi32);                    // ==0
             v_maski32 = _mm256_xor_si256(v_maski32, v_mask_xor);                     // reverse, mask at ==0
@@ -372,7 +371,7 @@ inline void scale_add2_reduce_max(float* a,
         }
 
         if (has_causal_mask) {
-            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(causal_mask + i));
+            auto v_maski8 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(causal_mask + i));
             auto v_maski32 = _mm256_cvtepi8_epi32(v_maski8);
             v_maski32 = _mm256_cmpeq_epi32(v_maski32, v_zeroi32);                    // ==0
             v_maski32 = _mm256_xor_si256(v_maski32, v_mask_xor);                     // reverse, mask at ==0
@@ -437,16 +436,19 @@ inline void scale_add2_reduce_max(float* a,
             a[i] += alibi_lookup[i] * alibi_slope;
         }
 
-        if (has_attn_mask)
+        if (has_attn_mask) {
             a[i] += attn_mask[i];
+        }
 
         if (has_causal_mask) {
             if (select_nfltmax_at_0) {
-                if (causal_mask[i] == 0)
+                if (causal_mask[i] == 0) {
                     a[i] = -FLT_MAX;
+                }
             } else {
-                if (causal_mask[i] != 0)
+                if (causal_mask[i] != 0) {
                     a[i] = -FLT_MAX;
+                }
             }
         }
 
@@ -516,7 +518,7 @@ inline void scale_add2_reduce_max(ov::float16* a,
         i += inc;
     }
     max = svmaxv_f16(pg_f16, v_max);
-#    else
+#    elif defined(HAVE_NEON_FP16)
     float16x8_t v_max = vdupq_n_f16(static_cast<float16_t>(-FLT_MAX));
     float16x8_t v_scale = vdupq_n_f16(static_cast<float16_t>(scale));
     float16x8_t v_a;
@@ -750,7 +752,7 @@ inline void exp_reduce_sum(float* a, const float max, const size_t size, float& 
 #    endif
 #endif
     for (; i < size; i++) {
-        a[i] = exp(a[i] - max);
+        a[i] = std::exp(a[i] - max);
         sum += a[i];
     }
 }
@@ -947,8 +949,7 @@ inline void multiply_scalar(float* a, float* a_dst, const float val, const size_
 }
 
 template <typename T,
-          typename = typename std::
-              enable_if<(std::is_same<T, ov::bfloat16>::value || std::is_same<T, ov::float16>::value), bool>::type>
+          typename = std::enable_if_t<(std::is_same_v<T, ov::bfloat16> || std::is_same_v<T, ov::float16>), bool>>
 inline void multiply_scalar(float* a, T* a_dst, const float val, const size_t size) {
     size_t i = 0;
 #if defined(HAVE_AVX512F)
@@ -1146,18 +1147,21 @@ inline void attn_softmax_kernel<float>(float* a,
     if (dst_precision == ov::element::f32) {
         multiply_scalar(a, reinterpret_cast<float*>(a_dst), scalar, len);
         // apply causual mask to final result instead of attn_score
-        if (total_size > len)
+        if (total_size > len) {
             memset(static_cast<float*>(a_dst) + len, 0, sizeof(float) * (total_size - len));
+        }
     } else if (dst_precision == ov::element::bf16) {
         multiply_scalar(a, static_cast<ov::bfloat16*>(a_dst), scalar, len);
         // apply causual mask to final result instead of attn_score
-        if (total_size > len)
+        if (total_size > len) {
             memset(static_cast<ov::bfloat16*>(a_dst) + len, 0, sizeof(ov::bfloat16) * (total_size - len));
+        }
     } else {
         multiply_scalar(a, static_cast<ov::float16*>(a_dst), scalar, len);
         // apply causual mask to final result instead of attn_score
-        if (total_size > len)
+        if (total_size > len) {
             memset(static_cast<ov::float16*>(a_dst) + len, 0, sizeof(ov::float16) * (total_size - len));
+        }
     }
 }
 #if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC)
@@ -1278,7 +1282,4 @@ inline void attn_softmax_kernel<ov::float16>(ov::float16* a,
 }
 #endif
 
-}  // namespace XARCH
-}  // namespace Cpu
-}  // namespace Extensions
-}  // namespace ov
+}  // namespace ov::Extensions::Cpu::XARCH

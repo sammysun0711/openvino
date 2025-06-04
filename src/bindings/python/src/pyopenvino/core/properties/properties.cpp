@@ -1,9 +1,13 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #include "pyopenvino/core/properties/properties.hpp"
 
+#include "openvino/runtime/auto/properties.hpp"
+#include "openvino/runtime/intel_cpu/properties.hpp"
+#include "openvino/runtime/intel_gpu/properties.hpp"
+#include "openvino/runtime/intel_npu/properties.hpp"
 #include "pyopenvino/core/common.hpp"
 #include "pyopenvino/graph/any.hpp"
 #include "pyopenvino/utils/utils.hpp"
@@ -34,6 +38,10 @@ void regmodule_properties(py::module m) {
     wrap_property_RW(m_properties, ov::force_tbb_terminate, "force_tbb_terminate");
     wrap_property_RW(m_properties, ov::enable_mmap, "enable_mmap");
     wrap_property_RW(m_properties, ov::weights_path, "weights_path");
+    wrap_property_RW(m_properties, ov::key_cache_precision, "key_cache_precision");
+    wrap_property_RW(m_properties, ov::value_cache_precision, "value_cache_precision");
+    wrap_property_RW(m_properties, ov::key_cache_group_size, "key_cache_group_size");
+    wrap_property_RW(m_properties, ov::value_cache_group_size, "value_cache_group_size");
 
     wrap_property_RO(m_properties, ov::supported_properties, "supported_properties");
     wrap_property_RO(m_properties, ov::available_devices, "available_devices");
@@ -92,6 +100,7 @@ void regmodule_properties(py::module m) {
     wrap_property_RW(m_hint, ov::hint::dynamic_quantization_group_size, "dynamic_quantization_group_size");
     wrap_property_RW(m_hint, ov::hint::kv_cache_precision, "kv_cache_precision");
     wrap_property_RW(m_hint, ov::hint::activations_scale_factor, "activations_scale_factor");
+    wrap_property_RW(m_hint, ov::hint::compiled_blob, "compiled_blob");
 
     // Submodule intel_cpu
     py::module m_intel_cpu =
@@ -257,6 +266,7 @@ void regmodule_properties(py::module m) {
         "openvino.properties.intel_gpu.CapabilityGPU submodule that simulates ov::intel_gpu::capability");
 
     m_capability_gpu.attr("HW_MATMUL") = ov::intel_gpu::capability::HW_MATMUL;
+    m_capability_gpu.attr("USM_MEMORY") = ov::intel_gpu::capability::USM_MEMORY;
 
     // Submodule log
     py::module m_log = m_properties.def_submodule("log", "openvino.properties.log submodule that simulates ov::log");
@@ -312,4 +322,23 @@ void regmodule_properties(py::module m) {
     wrap_property_RW(m_intel_auto, ov::intel_auto::enable_startup_fallback, "enable_startup_fallback");
     wrap_property_RW(m_intel_auto, ov::intel_auto::enable_runtime_fallback, "enable_runtime_fallback");
     wrap_property_RW(m_intel_auto, ov::intel_auto::schedule_policy, "schedule_policy");
+
+    // Submodule npu
+    py::module m_intel_npu =
+        m_properties.def_submodule("intel_npu", "openvino.properties.intel_npu submodule that simulates ov::intel_npu");
+
+    wrap_property_RO(m_intel_npu, ov::intel_npu::device_alloc_mem_size, "device_alloc_mem_size");
+    wrap_property_RO(m_intel_npu, ov::intel_npu::device_total_mem_size, "device_total_mem_size");
+    wrap_property_RO(m_intel_npu, ov::intel_npu::driver_version, "driver_version");
+    wrap_property_RO(m_intel_npu, ov::intel_npu::compiler_version, "compiler_version");
+
+    wrap_property_RW(m_intel_npu, ov::intel_npu::compilation_mode_params, "compilation_mode_params");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::turbo, "turbo");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::tiles, "tiles");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::max_tiles, "max_tiles");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::bypass_umd_caching, "bypass_umd_caching");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::defer_weights_load, "defer_weights_load");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::compiler_dynamic_quantization, "compiler_dynamic_quantization");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::qdq_optimization, "qdq_optimization");
+    wrap_property_RW(m_intel_npu, ov::intel_npu::run_inferences_sequentially, "run_inferences_sequentially");
 }

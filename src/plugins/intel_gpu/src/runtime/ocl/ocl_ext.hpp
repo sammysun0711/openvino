@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,6 +7,10 @@
 ///
 
 #pragma once
+
+#define CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL (1 << 23)
+#define CL_MEM_FLAGS_INTEL 0x10001
+#define CL_MEM_DEVICE_ID_INTEL 0x10011
 
 #include <array>
 
@@ -46,6 +50,7 @@ typedef cl_va_api_device_set_intel    cl_device_set_intel;
 
 // cl_intel_required_subgroup_size
 #define CL_DEVICE_SUB_GROUP_SIZES_INTEL           0x4108
+#define CL_KERNEL_SPILL_MEM_SIZE_INTEL            0x4109
 
 #endif // cl_intel_required_subgroup_size
 
@@ -54,6 +59,7 @@ typedef cl_va_api_device_set_intel    cl_device_set_intel;
 namespace cl {
 namespace detail {
 CL_HPP_DECLARE_PARAM_TRAITS_(cl_device_info, CL_DEVICE_SUB_GROUP_SIZES_INTEL, cl::vector<size_type>)
+CL_HPP_DECLARE_PARAM_TRAITS_(cl_kernel_work_group_info, CL_KERNEL_SPILL_MEM_SIZE_INTEL, cl_ulong)
 }  // namespace detail
 }  // namespace cl
 
@@ -928,9 +934,9 @@ private:
 class UsmMemory {
 public:
     explicit UsmMemory(const cl::UsmHelper& usmHelper) : _usmHelper(usmHelper) { }
-    UsmMemory(const cl::UsmHelper& usmHelper, void* usm_ptr)
+    UsmMemory(const cl::UsmHelper& usmHelper, void* usm_ptr, size_t offset = 0)
     : _usmHelper(usmHelper)
-    , _usm_pointer(std::make_shared<UsmHolder>(_usmHelper, usm_ptr, true)) {
+    , _usm_pointer(std::make_shared<UsmHolder>(_usmHelper, reinterpret_cast<uint8_t*>(usm_ptr) + offset, true)) {
         if (!usm_ptr) {
             throw std::runtime_error("[GPU] Can't share null usm pointer");
         }
@@ -941,21 +947,24 @@ public:
 
     void allocateHost(size_t size) {
         cl_int error = CL_SUCCESS;
-        auto ptr = _usmHelper.allocate_host(nullptr, size, 0, &error);
+        cl_mem_properties_intel properties[] = {CL_MEM_FLAGS_INTEL, CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL, 0};
+        auto ptr = _usmHelper.allocate_host(properties, size, 0, &error);
         _check_error(size, ptr, error, "Host");
         _allocate(ptr);
     }
 
     void allocateShared(size_t size) {
         cl_int error = CL_SUCCESS;
-        auto ptr = _usmHelper.allocate_shared(nullptr, size, 0, &error);
+        cl_mem_properties_intel properties[] = {CL_MEM_FLAGS_INTEL, CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL, 0};
+        auto ptr = _usmHelper.allocate_shared(properties, size, 0, &error);
         _check_error(size, ptr, error, "Shared");
         _allocate(ptr);
     }
 
     void allocateDevice(size_t size) {
         cl_int error = CL_SUCCESS;
-        auto ptr = _usmHelper.allocate_device(nullptr, size, 0, &error);
+        cl_mem_properties_intel properties[] = {CL_MEM_FLAGS_INTEL, CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL, 0};
+        auto ptr = _usmHelper.allocate_device(properties, size, 0, &error);
         _check_error(size, ptr, error, "Device");
         _allocate(ptr);
     }

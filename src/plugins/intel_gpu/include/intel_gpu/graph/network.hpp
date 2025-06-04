@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -15,6 +15,7 @@
 #include "intel_gpu/runtime/stream.hpp"
 #include "intel_gpu/runtime/shape_predictor.hpp"
 #include "intel_gpu/plugin/variable_state.hpp"
+#include "intel_gpu/plugin/sub_memory_manager.hpp"
 
 #include <map>
 #include <vector>
@@ -60,28 +61,34 @@ private:
 
 class primitive_inst;
 class ICompilationContext;
-
+/*struct TPHostTimeProfilingEntry {
+    int64_t extra_sync = 0;
+    int64_t extra_copy = 0;
+};*/
 struct network {
 public:
     using ptr = std::shared_ptr<network>;
 
-    network(program::ptr program, stream::ptr stream, bool is_internal, bool is_primary_stream);
-    network(program::ptr program, bool is_internal, bool is_primary_stream);
+    network(program::ptr program, stream::ptr stream, bool is_internal, bool is_primary_stream,
+            ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
+    network(program::ptr program, bool is_internal, bool is_primary_stream, ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
     network(engine& engine,
             const topology& topo,
             const ExecutionConfig& config = {},
             bool is_internal = false,
-            std::shared_ptr<ov::threading::IStreamsExecutor> task_executor = nullptr);
+            std::shared_ptr<ov::threading::IStreamsExecutor> task_executor = nullptr,
+            ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
 
     network(engine& engine,
             const std::set<std::shared_ptr<program_node>>& nodes,
             const ExecutionConfig& config,
             std::shared_ptr<ov::threading::IStreamsExecutor> task_executor,
-            bool is_internal);
+            bool is_internal,
+            ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
 
-    network(program::ptr program, uint16_t stream_id = 0);
+    network(program::ptr program, uint16_t stream_id = 0, ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
 
-    network(program::ptr program, stream::ptr stream, uint16_t stream_id);
+    network(program::ptr program, stream::ptr stream, uint16_t stream_id, ov::intel_gpu::SubMemoryManager::cptr sub_memory_manager = nullptr);
 
     ~network();
 
@@ -108,11 +115,12 @@ public:
                                 bool is_primary_stream = false);
     program::cptr get_program() const { return _program; }
     program::ptr get_program() { return _program; }
+    ov::intel_gpu::SubMemoryManager::ptr get_sub_mem_mgr() const { return _sub_memory_manager; }
     engine& get_engine() const { return _engine; }
 
     void reset_execution(bool wait = true);
     event::ptr set_input_data(const primitive_id& id, memory::ptr data, bool need_to_check_memory_to_set = true);
-    std::vector<event::ptr> set_output_memory(const primitive_id& id, memory::ptr mem);
+    std::vector<event::ptr> set_output_memory(const primitive_id& id, memory::ptr mem, bool is_remote = false);
 
     std::vector<std::shared_ptr<primitive_inst>> const& get_outputs() { return _outputs; }
 
@@ -160,6 +168,7 @@ public:
     std::map<primitive_id, network_output> execute(const std::vector<event::ptr>& dependencies = {});
 
     void validate_primitives();
+    void preallocate_shape_info_buffers();
     void set_arguments();
     // Implementation specific calls
     bool does_node_need_lockable_output(const primitive_id& id) const;
@@ -181,6 +190,10 @@ public:
     bool is_primary_stream() const { return _is_primary_stream; }
     bool is_dynamic() const { return _is_dynamic; }
     size_t get_weights_cache_capacity() const { return _weights_cache_capacity; }
+    bool contains_state(const std::string& variable_id);
+    memory& get_output_remote_memory(const primitive_id& id) const;
+    bool has_output_remote_memory_ptr(const primitive_id& id) const;
+    void reset_output_remote_memory_ptrs();
 
     memory_pool& get_memory_pool() const {
         return *_memory_pool;
@@ -192,8 +205,10 @@ public:
     const ov::intel_gpu::VariableStateInfo& get_variable_info(const std::string &variable_id) const;
     const ov::intel_gpu::VariablesMap& get_variables() const;
     const ov::intel_gpu::VariablesInfoMap& get_variables_info() const;
+    void set_reuse_variable_mem(bool reuse = false);
+    bool is_reuse_variable_mem() { return _reuse_variable_mem; }
 
-    const ExecutionConfig& get_config() const { return _config; }
+    const ExecutionConfig& get_config() const { return _program->get_config(); }
 
     std::shared_ptr<ShapePredictor> get_shape_predictor() { return _shape_predictor; }
     void set_shape_predictor(std::shared_ptr<ShapePredictor> shape_predictor) { _shape_predictor = shape_predictor; }
@@ -206,7 +221,6 @@ private:
     using output_chains_map = std::map<primitive_id, std::vector<primitive_inst*>>;
     uint32_t net_id = 0;
     program::ptr _program;
-    ExecutionConfig _config;
     engine& _engine;
     stream::ptr _stream;
     std::unique_ptr<memory_pool> _memory_pool;
@@ -215,6 +229,12 @@ private:
     bool _is_dynamic = false;
     bool _enable_profiling = false;
     bool _reset_arguments;
+    bool _reuse_variable_mem = false;
+
+    /* Common memory pointer for shape_info */
+    memory::ptr _shape_info_ptr;
+
+    std::unordered_map<primitive_id, memory::ptr> _output_remote_mem_ptrs;
 
     std::unordered_map<primitive_id, std::shared_ptr<primitive_inst>> _primitives;
     std::vector<shared_mem_type> _in_out_shared_mem_types;
@@ -225,6 +245,8 @@ private:
 
     ov::intel_gpu::VariablesMap _variables_states;
     ov::intel_gpu::VariablesInfoMap _variables_state_info;
+    std::vector<std::shared_ptr<primitive_inst>> _read_values;
+    std::unordered_map<primitive_id, std::vector<std::shared_ptr<primitive_inst>>> _state_initializers;
 
     program::primitives_info _prims_info;
     size_t _weights_cache_capacity = 1;
@@ -232,7 +254,7 @@ private:
     output_chains_map _output_chains;
 
     std::shared_ptr<ShapePredictor> _shape_predictor;
-
+    ov::intel_gpu::SubMemoryManager::ptr _sub_memory_manager;
     void build_exec_order();
     void allocate_primitive_instance(program_node const& node);
     void transfer_memory_to_device(std::shared_ptr<primitive_inst> instance, program_node const& node);
@@ -243,11 +265,13 @@ private:
     output_chains_map::iterator add_output_chain(std::shared_ptr<primitive_inst>& p_inst);
     void set_variables_state_info(const std::string& variable_id, const layout& variable_layout, ov::element::Type user_specified_type, const primitive* p);
     void dump_memory_pool(std::string dump_path, int64_t curr_iter);
-
+    std::map<std::string, std::vector<int64_t>> tp_host_times;
 #ifdef GPU_DEBUG_CONFIG
     mutable int64_t iteration = 0;
     friend class NetworkDebugHelper;
     friend class NodeDebugHelper;
+    int all_reduce_num_per_iter = 0;
+    int all_gather_num_per_iter = 0;
 #endif
 };
 }  // namespace cldnn

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -112,9 +112,30 @@ TEST_F(CoreBaseTest, LoadOVFolderOverCWPathPluginXML) {
     remove_plugin_xml(ov_file_path);
 }
 
+// <<<<<<< HEAD
+// #endif
+// =======
+// #    if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__APPLE__)
+// TEST(CoreBaseTest, ReadModelwithSymlink) {
+//     fs::create_directory("test_link");
+//     std::string modelName = "test_link/test.xml";
+//     std::string weightsName = "test_link/test.bin";
+//     ov::pass::Manager manager;
+//     manager.register_pass<ov::pass::Serialize>(modelName, weightsName);
+//     manager.run_passes(ov::test::utils::make_conv_pool_relu({1, 3, 227, 227}, ov::element::Type_t::f32));
+
+//     std::string modelNameSymlink = "test_link/test_symlink.xml";
+//     fs::create_symlink(modelName, modelNameSymlink);
+//     ov::Core core;
+//     EXPECT_NO_THROW(core.read_model(modelName, weightsName));
+//     EXPECT_THROW(core.read_model(modelNameSymlink, weightsName), std::runtime_error);
+
+//     fs::remove_all("test_link");
+//     ASSERT_FALSE(ov::util::directory_exists("test_link"));
+// }
+// #    endif
 #endif
 
-#if defined(OPENVINO_CPP_VER_17) && defined(ENABLE_OV_IR_FRONTEND)
 namespace ov::test {
 TEST_F(CoreBaseTest, read_model_with_std_fs_path) {
     generate_test_model_files("test-model");
@@ -152,4 +173,3 @@ TEST_F(CoreBaseTest, compile_model_with_std_fs_path) {
     }
 }
 }  // namespace ov::test
-#endif

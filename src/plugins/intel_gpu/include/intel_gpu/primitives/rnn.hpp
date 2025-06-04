@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -184,5 +184,12 @@ struct lstm_seq : public RNNParams<lstm_seq> {
     lstm_seq(const lstm_seq&) = default;
     primitive_id input;
     primitive_id weights;
+};
+
+struct gru_seq : public RNNParams<gru_seq> {
+    CLDNN_DECLARE_PRIMITIVE(gru_seq)
+    using RNNParams::RNNParams;
+    gru_seq(const gru_seq&) = default;
+    bool linear_before_reset;
 };
 } //namespace cldnn

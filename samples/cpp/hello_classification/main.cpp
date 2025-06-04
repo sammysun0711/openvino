@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -92,7 +92,7 @@ int tmain(int argc, tchar* argv[]) {
         model = ppp.build();
 
         // -------- Step 5. Loading a model to the device --------
-        ov::CompiledModel compiled_model = core.compile_model(model, device_name);
+        ov::CompiledModel compiled_model = core.compile_model(model, device_name, {{"MODEL_DISTRIBUTION_POLICY", "TENSOR_PARALLEL"}});
 
         // -------- Step 6. Create an infer request --------
         ov::InferRequest infer_request = compiled_model.create_infer_request();

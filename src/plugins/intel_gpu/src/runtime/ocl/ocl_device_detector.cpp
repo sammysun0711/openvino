@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -230,6 +230,46 @@ std::vector<device::ptr> ocl_device_detector::create_device_list_from_user_conte
     }
 
     OPENVINO_ASSERT(!supported_devices.empty(), "[GPU] User defined context does not have supported GPU device.");
+    return supported_devices;
+}
+
+std::vector<device::ptr> ocl_device_detector::create_device_with_multiple_context(const std::vector<int>& ctx_device_ids) const {
+    cl_uint num_platforms = 0;
+    // Get number of platforms availible
+    cl_int error_code = clGetPlatformIDs(0, NULL, &num_platforms);
+    if (num_platforms == 0 || error_code == CL_PLATFORM_NOT_FOUND_KHR) {
+        return {};
+    }
+
+    OPENVINO_ASSERT(error_code == CL_SUCCESS, create_device_error_msg, "[GPU] clGetPlatformIDs error code: ", std::to_string(error_code));
+    // Get platform list
+    std::vector<cl_platform_id> platform_ids(num_platforms);
+    error_code = clGetPlatformIDs(num_platforms, platform_ids.data(), NULL);
+    OPENVINO_ASSERT(error_code == CL_SUCCESS, create_device_error_msg, "[GPU] clGetPlatformIDs error code: ", std::to_string(error_code));
+    auto prime_device_id = ctx_device_ids[0];
+    std::vector<device::ptr> supported_devices;
+    for (auto& id : platform_ids) {
+        cl::Platform platform = cl::Platform(id);
+        try {
+            std::vector<cl::Device> devices;
+            platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+            std::vector<cl::Device> multi_devices;
+            for (size_t i = 0; i < devices.size(); i++) {
+                if (!does_device_match_config(devices[i]) || static_cast<int>(i) != prime_device_id)
+                    continue;
+                multi_devices.push_back(devices[i]);
+                for (size_t j = 0; j < devices.size(); j++) {
+                    if (j != i)
+                        multi_devices.push_back(devices[j]);
+                }
+                supported_devices.emplace_back(std::make_shared<ocl_device>(devices[i], cl::Context(multi_devices), platform));
+            }
+        } catch (std::exception& ex) {
+            GPU_DEBUG_LOG << "Devices query/creation failed for " << platform.getInfo<CL_PLATFORM_NAME>() << ": " << ex.what() << std::endl;
+            GPU_DEBUG_LOG << "Platform is skipped" << std::endl;
+            continue;
+        }
+    }
     return supported_devices;
 }
 

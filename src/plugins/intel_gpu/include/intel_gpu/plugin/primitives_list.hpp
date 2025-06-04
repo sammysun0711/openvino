@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -188,6 +188,7 @@ REGISTER_FACTORY(v4, CTCLoss);
 // REGISTER_FACTORY(v4, Range);
 
 // ------------------------------ Supported v5 ops ------------------------------ //
+REGISTER_FACTORY(v5, GRUSequence);
 REGISTER_FACTORY(v5, HSigmoid);
 REGISTER_FACTORY(v5, LogSoftmax);
 REGISTER_FACTORY(v5, LSTMSequence);
@@ -198,7 +199,6 @@ REGISTER_FACTORY(v5, Loop);
 
 // ----------------------------- Unsupported v5 ops ----------------------------- //
 // REGISTER_FACTORY(v5, BatchNormInference);
-// REGISTER_FACTORY(v5, GRUSequence);
 // REGISTER_FACTORY(v5, RNNSequence);
 
 // ------------------------------ Supported v6 ops ------------------------------ //
@@ -245,6 +245,7 @@ REGISTER_FACTORY(v9, ROIAlign);
 REGISTER_FACTORY(v9, RDFT);
 REGISTER_FACTORY(v9, IRDFT);
 REGISTER_FACTORY(v9, Eye);
+REGISTER_FACTORY(v9, NonMaxSuppression);
 
 // ------------------------------ Supported v10 ops ----------------------------- //
 REGISTER_FACTORY(v10, IsFinite);
@@ -269,12 +270,17 @@ REGISTER_FACTORY(v13, BitwiseOr);
 REGISTER_FACTORY(v13, BitwiseXor);
 REGISTER_FACTORY(v13, FakeConvert);
 
+
 // ------------------------------ Supported v15 ops ----------------------------- //
 REGISTER_FACTORY(v15, ROIAlignRotated);
 REGISTER_FACTORY(v15, BitwiseRightShift);
 REGISTER_FACTORY(v15, BitwiseLeftShift);
 REGISTER_FACTORY(v15, SearchSorted);
 REGISTER_FACTORY(v15, STFT);
+REGISTER_FACTORY(v15, Col2Im);
+
+// ------------------------------ Supported v16 ops ----------------------------- //
+REGISTER_FACTORY(v16, ISTFT);
 
 // --------------------------- Supported internal ops --------------------------- //
 REGISTER_FACTORY(internal, NonMaxSuppressionIEInternal);
@@ -297,5 +303,7 @@ REGISTER_FACTORY(internal, Placeholder);
 REGISTER_FACTORY(internal, SDPA);
 REGISTER_FACTORY(internal, IndirectSDPA);
 REGISTER_FACTORY(internal, RoPE);
+REGISTER_FACTORY(internal, SyncTensor);
+REGISTER_FACTORY(internal, RankConstant);
 REGISTER_FACTORY(internal, DynamicQuantize);
 REGISTER_FACTORY(internal, PagedAttentionExtension);

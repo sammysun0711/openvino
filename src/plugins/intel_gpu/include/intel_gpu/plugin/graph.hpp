@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -9,22 +9,19 @@
 #endif
 
 #include "intel_gpu/graph/network.hpp"
-#include "intel_gpu/graph/topology.hpp"
-#include "intel_gpu/plugin/custom_layer.hpp"
 #include "intel_gpu/plugin/remote_context.hpp"
 #include "intel_gpu/plugin/program_builder.hpp"
+#include "intel_gpu/plugin/sub_memory_manager.hpp"
 
 #include <vector>
 #include <map>
-#include <set>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <condition_variable>
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 struct HostTimeProfilingEntry {
     int64_t inputs_processing = 0;
     int64_t enqueue = 0;
@@ -41,7 +38,8 @@ public:
         POSTPROC = 4
     };
 
-    Graph(std::shared_ptr<ov::Model> model, const RemoteContextImpl::Ptr& context, const ExecutionConfig& config, uint16_t stream_id = 0);
+    Graph(std::shared_ptr<ov::Model> model, const RemoteContextImpl::Ptr& context, const ExecutionConfig& config, uint16_t stream_id = 0,
+            const std::shared_ptr<SubMemoryManager> sub_memory_manager = nullptr);
     Graph(cldnn::BinaryInputBuffer& ib, const RemoteContextImpl::Ptr& context, const ExecutionConfig& config, uint16_t stream_id = 0);
     Graph(std::shared_ptr<Graph> graph, uint16_t stream_id = 0);
     ~Graph();
@@ -101,10 +99,9 @@ private:
     std::vector<cldnn::primitive_id> profilingIDs;
 
     std::map<size_t, cldnn::layout> m_input_layouts;
-
+    std::shared_ptr<SubMemoryManager> m_sub_memory_manager;
     void build(std::shared_ptr<cldnn::program> program);
     std::shared_ptr<ov::Model> get_runtime_model(std::vector<cldnn::primitive_info>& pi, bool filter_const_primitives = true);
 };
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -10,6 +10,7 @@
 #include "ocl_engine.hpp"
 #include "ocl_stream.hpp"
 #include "ocl_event.hpp"
+#include <CL/cl_ext.h>
 #include <stdexcept>
 #include <vector>
 
@@ -26,6 +27,30 @@
 
 namespace cldnn {
 namespace ocl {
+
+static inline void check_boundaries(size_t src_size,
+                                    size_t src_offset,
+                                    size_t dst_size,
+                                    size_t dst_offset,
+                                    size_t copy_size,
+                                    const std::string& func_str = "") {
+    OPENVINO_ASSERT(src_offset + copy_size <= src_size && dst_offset + copy_size <= dst_size,
+                    "[GPU] Incorrect buffer sizes for ",
+                    func_str,
+                    " call. ",
+                    "Parameters provided are",
+                    ": src_size=",
+                    src_size,
+                    ", src_offset=",
+                    src_offset,
+                    ", dst_size=",
+                    dst_size,
+                    ", dst_offset=",
+                    dst_offset,
+                    ", copy_size=",
+                    copy_size,
+                    ".");
+}
 
 static inline cldnn::event::ptr create_event(stream& stream, size_t bytes_count, bool need_user_event) {
     if (bytes_count == 0) {
@@ -51,9 +76,10 @@ static int get_cl_map_type(mem_lock_type type) {
 
 gpu_buffer::gpu_buffer(ocl_engine* engine,
                        const layout& layout)
-    : lockable_gpu_mem(), memory(engine, layout, allocation_type::cl_mem, nullptr)
-    , _buffer(engine->get_cl_context(), CL_MEM_READ_WRITE, size()) {
-    m_mem_tracker = std::make_shared<MemoryTracker>(engine, _buffer.get(), layout.bytes_count(), allocation_type::cl_mem);
+    : lockable_gpu_mem(), memory(engine, layout, allocation_type::cl_mem, nullptr),
+    _buffer(engine->get_cl_context(), CL_MEM_READ_WRITE | CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL, size()) {
+    m_mem_tracker =
+        std::make_shared<MemoryTracker>(engine, _buffer.get(), layout.bytes_count(), allocation_type::cl_mem);
 }
 
 gpu_buffer::gpu_buffer(ocl_engine* engine,
@@ -132,6 +158,8 @@ event::ptr gpu_buffer::copy_from(stream& stream, const void* data_ptr, size_t sr
     if (size == 0)
         return result_event;
 
+    check_boundaries(SIZE_MAX, src_offset, _bytes_count, dst_offset, size, "gpu_buffer::copy_from(void*)");
+
     auto cl_stream = downcast<ocl_stream>(&stream);
     auto cl_event = blocking ? nullptr : &downcast<ocl_event>(result_event.get())->get();
     auto src_ptr = reinterpret_cast<const char*>(data_ptr) + src_offset;
@@ -145,6 +173,8 @@ event::ptr gpu_buffer::copy_from(stream& stream, const memory& src_mem, size_t s
     auto result_event = create_event(stream, size, false);
     if (size == 0)
         return result_event;
+
+    check_boundaries(src_mem.size(), src_offset, _bytes_count, dst_offset, size, "gpu_buffer::copy_from(memory&)");
 
     switch (src_mem.get_allocation_type()) {
         case allocation_type::usm_host:
@@ -179,6 +209,8 @@ event::ptr gpu_buffer::copy_to(stream& stream, void* data_ptr, size_t src_offset
     auto result_event = create_event(stream, size, blocking);
     if (size == 0)
         return result_event;
+
+    check_boundaries(_bytes_count, src_offset, SIZE_MAX, dst_offset, size, "gpu_buffer::copy_to(void*)");
 
     auto cl_stream = downcast<ocl_stream>(&stream);
     auto cl_event = blocking ? nullptr : &downcast<ocl_event>(result_event.get())->get();
@@ -540,6 +572,8 @@ event::ptr gpu_usm::copy_from(stream& stream, const void* data_ptr, size_t src_o
     if (size == 0)
         return result_event;
 
+    check_boundaries(SIZE_MAX, src_offset, _bytes_count, dst_offset, size, "gpu_usm::copy_from(void*)");
+
     auto cl_stream = downcast<ocl_stream>(&stream);
     auto cl_event = blocking ? nullptr : &downcast<ocl_event>(result_event.get())->get();
     auto src_ptr = reinterpret_cast<const char*>(data_ptr) + src_offset;
@@ -554,6 +588,8 @@ event::ptr gpu_usm::copy_from(stream& stream, const memory& src_mem, size_t src_
     auto result_event = create_event(stream, size, blocking);
     if (size == 0)
         return result_event;
+
+    check_boundaries(src_mem.size(), src_offset, _bytes_count, dst_offset, size, "gpu_usm::copy_from(memory&)");
 
     auto cl_stream = downcast<ocl_stream>(&stream);
     auto cl_event = blocking ? nullptr : &downcast<ocl_event>(result_event.get())->get();
@@ -585,6 +621,8 @@ event::ptr gpu_usm::copy_to(stream& stream, void* data_ptr, size_t src_offset, s
     auto result_event = create_event(stream, size, blocking);
     if (size == 0)
         return result_event;
+
+    check_boundaries(_bytes_count, src_offset, SIZE_MAX, dst_offset, size, "gpu_usm::copy_to(void*)");
 
     auto cl_stream = downcast<ocl_stream>(&stream);
     auto cl_event = blocking ? nullptr : &downcast<ocl_event>(result_event.get())->get();

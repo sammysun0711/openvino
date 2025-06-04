@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -7,7 +7,10 @@
 #include <unordered_set>
 
 #include "itt.hpp"
+#include "openvino/core/graph_util.hpp"
 #include "openvino/core/rt_info.hpp"
+#include "openvino/op/util/op_types.hpp"
+#include "openvino/opsets/opset6_decl.hpp"
 #include "openvino/pass/constant_folding.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
 #include "ov_ops/rotary_positional_embeddings.hpp"
@@ -31,8 +34,8 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
             return false;
         }
 
-        if (readvalue->get_rt_info().count("DisableInitSubgraphFusing") &&
-            readvalue->get_rt_info()["DisableInitSubgraphFusing"].as<bool>()) {
+        if (auto it = readvalue->get_rt_info().find("DisableInitSubgraphFusing");
+            it != readvalue->get_rt_info().end() && it->second.as<bool>()) {
             return false;
         }
 
@@ -43,7 +46,7 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
         OutputVector outputs = {};
 
         // DFS, Check if current node's final successor is only ReadValue.
-        std::function<void(std::shared_ptr<ov::Node>, bool&)> dfs = [&](std::shared_ptr<ov::Node> node,
+        std::function<void(std::shared_ptr<ov::Node>, bool&)> dfs = [&](const std::shared_ptr<ov::Node>& node,
                                                                         bool& found_output) {
             if (found_output) {
                 return;
@@ -59,7 +62,7 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
             }
 
             // node is Output
-            if (node->get_output_target_inputs(0).size() == 0u) {
+            if (node->get_output_target_inputs(0).empty()) {
                 found_output = true;
                 return;
             }
@@ -84,7 +87,7 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
             }
         };
 
-        std::function<void(std::shared_ptr<ov::Node>)> reverse_dfs = [&](std::shared_ptr<ov::Node> node) {
+        std::function<void(std::shared_ptr<ov::Node>)> reverse_dfs = [&](const std::shared_ptr<ov::Node>& node) {
             if (visited_path_to_output.find(node) != visited_path_to_output.end()) {
                 inputs.emplace_back(node);
                 return;
@@ -122,13 +125,13 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
         // Reverse DFS ReadValue, find all suitable nodes and move them to subgraph_nodes.
         reverse_dfs(readvalue->get_input_node_shared_ptr(0));
 
-        if (inputs.size() == 0 || subgraph_nodes.size() == 0) {
+        if (inputs.empty() || subgraph_nodes.empty()) {
             return false;
         }
 
         // Subgraph's input
         auto params = ParameterVector{};
-        for (auto inp : inputs) {
+        for (const auto& inp : inputs) {
             auto param =
                 std::make_shared<ov::op::v0::Parameter>(inp->get_element_type(), inp->get_output_partial_shape(0));
             params.push_back(param);
@@ -141,7 +144,7 @@ ov::intel_cpu::MoveReadValueInputsToSubgraph::MoveReadValueInputsToSubgraph() {
         }
 
         // Subgraph's output
-        auto last_node = readvalue->get_input_node_shared_ptr(0);
+        auto last_node = readvalue->input_value(0);
         auto output = std::make_shared<ov::op::v0::Result>(last_node);
         auto func = std::make_shared<Model>(ov::ResultVector({output}), params, "state_init_submodel");
 
